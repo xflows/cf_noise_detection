@@ -1,4 +1,4 @@
-import cf_noise.utilities as u
+import cf_noise_detection.utilities as u
 import cf_data_mining.dataset as d
 
 # ===================================================================
@@ -9,8 +9,8 @@ def harf(input_dict):
     from cf_core.helpers import UnpicklableObject
     agrLevel = input_dict['agr_level']
     #data = input_dict['data']
-    harfout = UnpicklableObject("cf_noise.orngRF_HARF.HARFLearner(agrLevel ="+agrLevel+", name='HARF-"+str(agrLevel)+"')")
-    harfout.addimport("import cf_noise.orngRF_HARF")
+    harfout = UnpicklableObject("cf_noise_detection.orngRF_HARF.HARFLearner(agrLevel ="+agrLevel+", name='HARF-"+str(agrLevel)+"')")
+    harfout.addimport("import cf_noise_detection.orngRF_HARF")
     #harfLearner = orngRF_HARF.HARFLearner(agrLevel = agrLevel, name = "_HARF-"+agrLevel+"_")
     output_dict = {}
     output_dict['harfout']= harfout
@@ -19,7 +19,7 @@ def harf(input_dict):
 # CLASSIFICATION NOISE FILTER
 
 def classification_filter(input_dict, widget):
-    import cf_noise.noiseAlgorithms4lib as nalg
+    import cf_noise_detection.noiseAlgorithms4lib as nalg
     output_dict = {}
     # output_dict['noise_dict']= noiseAlgorithms4lib.cf_decide(input_dict, widget)
 
@@ -31,7 +31,7 @@ def classification_filter(input_dict, widget):
 # SATURATION NOISE FILTER
 
 def saturation_filter(input_dict, widget):
-    import cf_noise.noiseAlgorithms4lib as nalg
+    import cf_noise_detection.noiseAlgorithms4lib as nalg
 
     orange_dataset = u.convert_dataset_from_scikit_to_orange(input_dict['data'])
 
@@ -117,7 +117,7 @@ def add_class_noise(input_dict):
 
     data = u.convert_dataset_from_scikit_to_orange(data_scikit)
 
-    import cf_noise.noiseAlgorithms4lib as nalg
+    import cf_noise_detection.noiseAlgorithms4lib as nalg
     noise_indices, orange_data = nalg.add_class_noise(data, input_dict['noise_level'], input_dict['rnd_seed'])
 
     data = u.convert_dataset_from_orange_to_scikit(orange_data)

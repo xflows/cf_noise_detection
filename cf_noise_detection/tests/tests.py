@@ -7,7 +7,7 @@ import cf_data_mining.utilities as ut
 
 class Tests1(unittest.TestCase):
     def test_add_class_noise(self):
-        import cf_noise.library as l
+        import cf_noise_detection.library as l
 
         data = ut.load_UCI_dataset("iris")
         inp_dict = {'data': data, 'noise_level': 10.0, 'rnd_seed': 1}
@@ -19,7 +19,7 @@ class Tests1(unittest.TestCase):
         """ Tests harf
         """
 
-        import cf_noise.library as l
+        import cf_noise_detection.library as l
         inp_dict = {'agr_level': '70'}
 
         out_dict = l.harf(inp_dict)
@@ -29,7 +29,7 @@ class Tests1(unittest.TestCase):
     def test_noise_rank(self):
         """Tests noise rank widget
         """
-        import cf_noise.library as l
+        import cf_noise_detection.library as l
         import cf_weka.classification as c
 
         learner = c.j48()
@@ -51,7 +51,7 @@ class Tests1(unittest.TestCase):
         """ Tests saturation_filter (normal and prune) and classification_filter
         """
 
-        import cf_noise.library as l
+        import cf_noise_detection.library as l
         import cf_weka.classification as c
 
         learner = c.j48()

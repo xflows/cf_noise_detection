@@ -5,7 +5,7 @@ import orange
 import orngTree
 from cf_core.helpers import UnpicklableObject
 
-from cf_noise.utilities import convert_dataset_from_orange_to_scikit
+from cf_noise_detection.utilities import convert_dataset_from_orange_to_scikit
 
 
 def add_class_noise(data, noise_level, rnd_seed):
