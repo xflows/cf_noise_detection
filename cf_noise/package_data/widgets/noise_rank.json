@@ -45,7 +45,7 @@
     "fields": {
       "widget": "c8ec62db-aded-4fb5-8e5f-7766b1d86fe4", 
       "name": "Dataset", 
-      "short_name": "ds", 
+      "short_name": "dts",
       "default": "", 
       "description": "", 
       "required": false, 

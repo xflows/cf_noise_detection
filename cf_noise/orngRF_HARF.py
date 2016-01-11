@@ -1,4 +1,7 @@
-import orange, math, orngTest, orngStat, random, orngMisc
+import math
+import orange
+import orngMisc
+import random
 
 ##################################################################
 # The orngEnsemble with CHANGED Random Forest Classifier voting!!!
@@ -139,7 +142,7 @@ class BaggedClassifier(orange.Classifier):
 ########################################################################
 # Random Forests
 
-from math import sqrt, floor
+from math import sqrt
 import orngTree
 
 class SplitConstructor_AttributeSubset(orange.TreeSplitConstructor):

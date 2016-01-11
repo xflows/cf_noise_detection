@@ -45,7 +45,7 @@
     "fields": {
       "widget": "ae7f1d26-8477-4192-b7e6-5b35a055074c", 
       "name": "Dataset", 
-      "short_name": "ds", 
+      "short_name": "dts",
       "default": "", 
       "description": "", 
       "required": true, 
@@ -56,24 +56,7 @@
       "order": 3, 
       "uid": "acb2c1f9-d57c-4122-8088-a270aab2565a"
     }
-  }, 
-  {
-    "model": "workflows.abstractinput", 
-    "fields": {
-      "widget": "ae7f1d26-8477-4192-b7e6-5b35a055074c", 
-      "name": "Timeout", 
-      "short_name": "tmo", 
-      "default": "300", 
-      "description": "", 
-      "required": true, 
-      "multi": false, 
-      "parameter_type": "text", 
-      "variable": "timeout", 
-      "parameter": true, 
-      "order": 1, 
-      "uid": "df47c26c-4440-4dd0-9abb-b00759c5d4a5"
-    }
-  }, 
+  },
   {
     "model": "workflows.abstractinput", 
     "fields": {

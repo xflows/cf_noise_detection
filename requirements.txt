@@ -1,1 +1,4 @@
-cf_base
+cf_core
+cf_data_mining
+cf_weka
+orange

@@ -1,6 +1,14 @@
-import orange, orngTree, random
+import random
 
-def addClassNoise(data, noise_level, rnd_seed):
+import cf_data_mining.classifier as c
+import orange
+import orngTree
+from cf_core.helpers import UnpicklableObject
+
+from cf_noise.utilities import convert_dataset_from_orange_to_scikit
+
+
+def add_class_noise(data, noise_level, rnd_seed):
     """adds class Noise
 
     :param data: Orange dataset
@@ -43,9 +51,9 @@ def addClassNoise(data, noise_level, rnd_seed):
         #print "\t", temp, "changed to:", data[index].getclass(), "(", index, ")"
     #print "\n"
     noise_indices.sort()
-    return {'noise_inds':noise_indices, 'noisy_data': data}
+    return noise_indices, data
 
-def addMetaID(data):
+def add_meta_id(data):
     meta_id = orange.FloatVariable("meta_id")
     mid = orange.newmetaid()
     while mid in data.domain.getmetas().keys():
@@ -54,63 +62,116 @@ def addMetaID(data):
     for i in range(len(data)):
         data[i][meta_id] = i
 
-def cfdecide(input_dict, widget):
+
+def cf_decide(learner, orange_dataset, k_folds, widget):
     """Classification filter decide
 
-    :param input_dict:
+    :param learner: Classifier object
+    :param orange_dataset:
+    :param k_folds:
     :param widget:
     :return:
     """
 
-    from pysimplesoap.client import SoapFault
-    somelearner = input_dict['learner']
-    print somelearner
+    # somelearner = input_dict['learner']
+    print learner
     # SWITCH TO PROCESSING WITH WEKA CLASSIFIERS    
-    if type(somelearner) == unicode or type(somelearner) == str:
-        # from services.webservice import WebService
-        from cf_base.helpers import WebService
-        wsutil = WebService('http://vihar.ijs.si:8092/Utilities?wsdl', float(input_dict['timeout']))
-        name = ""
-        try:
-            name = wsutil.client.print_model(model = somelearner)['model_as_string']            
-            print wsutil.client.print_model(model = somelearner), name
-        except SoapFault:
-            print "Soap fault: unicode string is not a Weka classification learner/model."
-            return {}
-        return cfweka(somelearner,
-                      input_dict['data'],
-                      int(input_dict['k_folds']),
-                      float(input_dict['timeout']),
+    if isinstance(learner, c.Classifier):
+
+        name = learner.print_classifier()
+
+        return cf_run(learner,
+                      orange_dataset,
+                      k_folds,
                       name,
                       widget)
     else:
-        return cforange(input_dict, widget)
+        return cf_run_harf(learner, orange_dataset, k_folds, widget)
+    # else:
+    #     raise Exception("Provided learner is in an unsupported format", str(learner))
 
-def cforange(input_dict, widget):
-    """Classification filter for Orange learner
 
-    :param input_dict:
+def cf_run(learner, data, k_folds, name, widget=None):
+    """Runs a classification filter
+
+    :param learner: WekaClassifier
+    :param data: Orange dataset
+    :param k_folds:
+    :param name:
+    :param timeout:
     :param widget:
     :return:
     """
-    # from workflows.helpers import UnpicklableObject
-    from cf_base.helpers import UnpicklableObject
-    somelearner = input_dict['learner']
+
+    somelearner = learner
+    print somelearner
+
+    noisyIndices = []
+    selection = orange.MakeRandomIndicesCV(data, folds=k_folds)
+    count_noisy = [0]*k_folds
+    for test_fold in range(k_folds):
+        # train_data = wsutil.client.arff_to_weka_instances(arff = train_arffstr, class_index = data.domain.index(data.domain.classVar))['instances']
+        train_data = convert_dataset_from_orange_to_scikit( data.select(selection, test_fold, negate=1) )
+
+        test_inds = [i for i in range(len(selection)) if selection[i] == test_fold ]
+        # test_data = wsutil.client.arff_to_weka_instances(arff = test_arffstr, class_index = data.domain.index(data.domain.classVar))['instances']
+        test_data = convert_dataset_from_orange_to_scikit( data.select(selection, test_fold) )
+
+        #print "\t\t", "Learned on", len(train_data), "examples"
+        #file.flush()
+
+        print "before cl build"
+        # classifier = wseval.client.build_classifier(learner = somelearner, instances = train_data)['classifier']
+        learner.build_classifier(train_data)
+        print "after cl build"
+
+        # eval_test_data = wseval.client.apply_classifier(classifier = classifier, instances = test_data)
+        scikit_dataset_predicted = learner.apply_classifier(test_data)
+
+        print "after apply"
+
+        for i in range(len(scikit_dataset_predicted.target)):
+            #print "Test data length:", len(test_data), "Test inds length:", len(test_inds), "Eval Test data length:", len(eval_test_data)  
+            # print i, "v for zanki", eval_test_data[i]['classes'], data[test_inds[i]].getclass()
+            # if eval_test_data[i]['classes'] != unicode(data[test_inds[i]].getclass()):
+
+            if scikit_dataset_predicted.target[i] != scikit_dataset_predicted.targetPredicted[i]:
+                # selection_filter[int(example[meta_id].value)] = 0
+                noisyIndices.append(test_inds[i])
+                count_noisy[test_fold] += 1
+        # END test_data
+        if not(widget is None):
+            widget.progress = int((test_fold+1)*1.0/k_folds*100)
+            widget.save()
+    # END test_fold
+    return {'inds': sorted(noisyIndices), 'name': get_weka_name(name)}
+
+def cf_run_harf(learner, data_orange, k_folds, widget=None):
+    """Classification filter for HARF learner
+
+    :param learner:
+    :param data_orange:
+    :param k_folds:
+    :param widget:
+    :return:
+    """
+
+    somelearner = learner
     print "Before generate"
     learner = somelearner if not isinstance(somelearner,UnpicklableObject) else somelearner.generate()
     print "After generate"
-    data = input_dict['data']
-    print len(data)
-    addMetaID(data)
+    # data_orange = input_dict['data_orange']
+    print len(data_orange)
+    add_meta_id(data_orange)
     print 'Before for loop'
-    k = int(input_dict['k_folds'])
+    k = k_folds
     noisyIndices = []
-    selection = orange.MakeRandomIndicesCV(data, folds=k)
+    selection = orange.MakeRandomIndicesCV(data_orange, folds=k)
     count_noisy = [0]*k
     print 'Before for loop'
     for test_fold in range(k):
-        train_data = data.select(selection, test_fold, negate=1)
-        test_data = data.select(selection, test_fold)
+        train_data = data_orange.select(selection, test_fold, negate=1)
+        test_data = data_orange.select(selection, test_fold)
         #print "\t\t", "Learned on", len(train_data), "examples"
         #file.flush()
         print 'Before classifier construction'
@@ -124,63 +185,12 @@ def cforange(input_dict, widget):
                 noisyIndices.append(int(example["meta_id"].value))
                 count_noisy[test_fold] += 1
         # END test_data
-        widget.progress = int((test_fold+1)*1.0/k*100)
-        widget.save()
-    # END test_fold
-    return {'inds': sorted(noisyIndices), 'name': learner.name} 
-    ##    filtered_data = data.select(selection_filter, 1)
-    ##    noisy_data = data.select(selection_filter, 0)
-    ##    return [filtered_data, noisy_data]=======
-
-def cfweka(learner, data, k_folds, timeout, name, widget=None):
-    """Classification filter for a Weka learner
-
-    :param learner: Weka learner, serialized
-    :param data: Orange dataset
-    :param k_folds:
-    :param name:
-    :param timeout:
-    :param widget:
-    :return:
-    """
-
-    from cf_base.helpers import WebService
-    wseval = WebService('http://vihar.ijs.si:8092/Evaluation?wsdl', timeout)
-    wsutil = WebService('http://vihar.ijs.si:8092/Utilities?wsdl', timeout)
-
-    somelearner = learner
-    print somelearner
-
-    noisyIndices = []
-    selection = orange.MakeRandomIndicesCV(data, folds=k_folds)
-    count_noisy = [0]*k_folds
-    for test_fold in range(k_folds):
-        train_arffstr = toARFFstring(data.select(selection, test_fold, negate=1)).getvalue()
-        train_data = wsutil.client.arff_to_weka_instances(arff = train_arffstr, class_index = data.domain.index(data.domain.classVar))['instances']
-        
-        test_inds = [i for i in range(len(selection)) if selection[i] == test_fold ]
-        test_arffstr = toARFFstring(data.select(selection, test_fold)).getvalue()
-        test_data = wsutil.client.arff_to_weka_instances(arff = test_arffstr, class_index = data.domain.index(data.domain.classVar))['instances']
-        #print "\t\t", "Learned on", len(train_data), "examples"
-        #file.flush()
-        print "pred cl build"
-        classifier = wseval.client.build_classifier(learner = somelearner, instances = train_data)['classifier']
-        print "po cl build"
-        eval_test_data = wseval.client.apply_classifier(classifier = classifier, instances = test_data)
-        print "po eval"
-        for i in range(len(eval_test_data)):
-            #print "Test data length:", len(test_data), "Test inds length:", len(test_inds), "Eval Test data length:", len(eval_test_data)  
-            print i, "v for zanki", eval_test_data[i]['classes'], data[test_inds[i]].getclass()
-            if eval_test_data[i]['classes'] != unicode(data[test_inds[i]].getclass()):
-                # selection_filter[int(example[meta_id].value)] = 0
-                noisyIndices.append(test_inds[i])
-                count_noisy[test_fold] += 1
-        # END test_data
         if not(widget is None):
-            widget.progress = int((test_fold+1)*1.0/k_folds*100)
+            widget.progress = int((test_fold+1)*1.0/k*100)
             widget.save()
     # END test_fold
-    return {'inds': sorted(noisyIndices), 'name': getWekaName(name)} 
+    return {'inds': sorted(noisyIndices), 'name': learner.name}
+
 
 def saturation_type(dataset, satur_type='normal', widget=None):
     """Saturation filter
@@ -191,7 +201,7 @@ def saturation_type(dataset, satur_type='normal', widget=None):
     :return:
     """
 
-    addMetaID(dataset)
+    add_meta_id(dataset)
     if not(widget==None):
         widget.progress = 0
         widget.save()
@@ -200,7 +210,7 @@ def saturation_type(dataset, satur_type='normal', widget=None):
     progress_steps = (3*data_len**2 + 2*data_len)/8 # provided max allowed iter steps (k) = data_len/2
     if satur_type == 'prune':
         if not dataset.hasMissingValues():
-            return pruneSF(dataset, 1, progress_steps, widget)
+            return prune_sf(dataset, 1, progress_steps, widget)
         else:
             raise Exception("Pre-pruned saturation filtering requires data WITHOUT missing values!")
     else:
@@ -210,7 +220,7 @@ def cmplx(set):
     classifier = orngTree.TreeLearner(set, sameMajorityPruning=1, mForPruning=0)
     return orngTree.countNodes(classifier)
 
-def findNoise(data):
+def find_noise(data):
     n = len(data)
     noisiest = []
     gE = cmplx(data)
@@ -264,7 +274,7 @@ def saturation(dataset, widget):
     workSet = orange.ExampleTable(dataset)
     while k != 0:
         n = len(workSet)
-        satfilter = findNoise(workSet)
+        satfilter = find_noise(workSet)
         if satfilter == [1,[]]:
             print "\t\t", satfilter
             if not(widget==None):
@@ -321,10 +331,10 @@ def findPrunableNoisy(node, minExmplsInLeaf):
     else:
         raise TypeError, "TreeNode expected"
 
-def excludePruned(dataset, classifier, minExmplsInLeaf):
+def exclude_pruned(dataset, classifier, minExmplsInLeaf):
     print "in exclude"
     toPrune = findPrunableNoisy(classifier.tree, minExmplsInLeaf)
-    uniqueItems(toPrune)
+    unique_items(toPrune)
     print "\t\t", "Leaves with", minExmplsInLeaf, "or less examples will be pruned."
     print "\t\t", "IDs of examples excluded by pruning:", toPrune
     #file.flush()
@@ -338,7 +348,7 @@ def excludePruned(dataset, classifier, minExmplsInLeaf):
     #return [noisyA, dataset]
     return [toPrune, workSet]
     
-def uniqueItems(list):
+def unique_items(list):
     list.sort()
     k = 0
     while k < len(list)-1:
@@ -347,7 +357,7 @@ def uniqueItems(list):
         else:
             k += 1
 
-def pruneSF(data, minExmplsInLeaf, progress_steps, widget=None):
+def prune_sf(data, minExmplsInLeaf, progress_steps, widget=None):
     """Prune Saturation Filter
 
     :param data:
@@ -362,8 +372,8 @@ def pruneSF(data, minExmplsInLeaf, progress_steps, widget=None):
     classifier = orngTree.TreeLearner(data, sameMajorityPruning=1, mForPruning=0, storeExamples=1)
     print "\t\t", "Classifier complexity:\t", orngTree.countNodes(classifier), "nodes."
     #file.flush()
-##    [noisyA, dataset] = excludePruned(data, classifier, minExmplsInLeaf)
-    [noisePruned, dataset] = excludePruned(data, classifier, minExmplsInLeaf)
+##    [noisyA, dataset] = exclude_pruned(data, classifier, minExmplsInLeaf)
+    [noisePruned, dataset] = exclude_pruned(data, classifier, minExmplsInLeaf)
     print "\t\t", len(noisePruned), "example(s) were excluded by pruning."
     #file.flush()
     classifier2 = orngTree.TreeLearner(dataset, sameMajorityPruning=1, mForPruning=0, storeExamples=1)
@@ -395,67 +405,8 @@ def pruneSF(data, minExmplsInLeaf, progress_steps, widget=None):
     #return noisePruned
     
     
-# to ARFF String
 
-def toARFFstring(table,try_numericize=0):#filename,table,try_numericize=0):
-    import cStringIO, string    
-    t = table
-    #if filename[-5:] == ".arff":
-     #   filename = filename[:-5]
-    #print filename
-    f = cStringIO.StringIO()
-    f.write('@relation %s\n'%t.domain.classVar.name)
-    # attributes
-    ats = [i for i in t.domain.attributes]
-    ats.append(t.domain.classVar)
-    for i in ats:
-        real = 1
-        if i.varType == 1:
-            if try_numericize:
-                # try if all values numeric
-                for j in i.values:
-                    try:
-                        x = string.atof(j)
-                    except:
-                        real = 0 # failed
-                        break
-            else:
-                real = 0
-        iname = str(i.name)
-        if string.find(iname," ") != -1:
-            iname = "'%s'"%iname
-        if real==1:
-            f.write('@attribute %s real\n'%iname)
-        else:
-            f.write('@attribute %s { '%iname)
-            x = []
-            for j in i.values:
-                s = str(j)
-                if string.find(s," ") == -1:
-                    x.append("%s"%s)
-                else:
-                    x.append("'%s'"%s)
-            for j in x[:-1]:
-                f.write('%s,'%j)
-            f.write('%s }\n'%x[-1])
-
-    # examples
-    f.write('@data\n')
-    for j in t:
-        x = []
-        for i in range(len(ats)):
-            s = str(j[i])
-            if string.find(s," ") == -1:
-                x.append("%s"%s)
-            else:
-                x.append("'%s'"%s)
-        for i in x[:-1]:
-            f.write('%s,'%i)
-        f.write('%s\n'%x[-1])
-        
-    return f
-
-def getWekaName(name):
+def get_weka_name(name):
     #print name
     if name == None:
         return 'Multilayer Perceptron (Weka)'

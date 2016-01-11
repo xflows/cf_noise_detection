@@ -33,9 +33,9 @@
       "description": "", 
       "required": false, 
       "multi": false, 
-      "parameter_type": null, 
+      "parameter_type": "text",
       "variable": "rnd_seed", 
-      "parameter": false, 
+      "parameter": true,
       "order": 1, 
       "uid": "89c20239-c4e0-4368-9828-ab73155e2457"
     }
@@ -61,8 +61,8 @@
     "model": "workflows.abstractinput", 
     "fields": {
       "widget": "4c603285-3aa7-4b55-8d57-cc8285e212c2", 
-      "name": "Orange Data Table", 
-      "short_name": "odt", 
+      "name": "Dataset",
+      "short_name": "dts",
       "default": "", 
       "description": "", 
       "required": true, 
@@ -79,7 +79,7 @@
     "fields": {
       "widget": "4c603285-3aa7-4b55-8d57-cc8285e212c2", 
       "name": "Noisy Dataset", 
-      "short_name": "nds", 
+      "short_name": "dts",
       "description": "", 
       "variable": "noisy_data", 
       "order": 1, 

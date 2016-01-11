@@ -1,13 +1,16 @@
+import cf_noise.utilities as u
+import cf_data_mining.dataset as d
+
 # ===================================================================
 # HARF (HIGH AGREEMENT RANDOM FOREST)
 
 def harf(input_dict):
     #import orngRF_HARF
-    from cf_base.helpers import UnpicklableObject
+    from cf_core.helpers import UnpicklableObject
     agrLevel = input_dict['agr_level']
     #data = input_dict['data']
-    harfout = UnpicklableObject("orngRF_HARF.HARFLearner(agrLevel ="+agrLevel+", name='HARF-"+str(agrLevel)+"')")
-    harfout.addimport("import orngRF_HARF")
+    harfout = UnpicklableObject("cf_noise.orngRF_HARF.HARFLearner(agrLevel ="+agrLevel+", name='HARF-"+str(agrLevel)+"')")
+    harfout.addimport("import cf_noise.orngRF_HARF")
     #harfLearner = orngRF_HARF.HARFLearner(agrLevel = agrLevel, name = "_HARF-"+agrLevel+"_")
     output_dict = {}
     output_dict['harfout']= harfout
@@ -18,23 +21,39 @@ def harf(input_dict):
 def classification_filter(input_dict, widget):
     import cf_noise.noiseAlgorithms4lib as nalg
     output_dict = {}
-    # output_dict['noise_dict']= noiseAlgorithms4lib.cfdecide(input_dict, widget)
-    output_dict['noise_dict']= nalg.cfdecide(input_dict, widget=None)
+    # output_dict['noise_dict']= noiseAlgorithms4lib.cf_decide(input_dict, widget)
+
+    orange_dataset = u.convert_dataset_from_scikit_to_orange(input_dict['data'])
+
+    output_dict['noise_dict']= nalg.cf_decide(input_dict['learner'], orange_dataset, int(input_dict['k_folds']), widget=None)
     return output_dict
 
 # SATURATION NOISE FILTER
 
 def saturation_filter(input_dict, widget):
     import cf_noise.noiseAlgorithms4lib as nalg
+
+    orange_dataset = u.convert_dataset_from_scikit_to_orange(input_dict['data'])
+
+    if not(input_dict['satur_type'] in ['normal', 'prune']):
+        raise Exception("Only 'normal' or 'prune' allowed for 'satur_type'.")
+
     output_dict = {}
-    output_dict['noise_dict']= nalg.saturation_type(input_dict['data'], widget)
+    output_dict['noise_dict']= nalg.saturation_type(orange_dataset, input_dict['satur_type'], widget)
     return output_dict
 
 # NOISE RANK
 
 def noiserank(input_dict):
+    """Widget NoiseRank
+
+    :param input_dict:
+    :return:
+    """
     allnoise = {}
-    data = input_dict['data']
+
+    data = u.convert_dataset_from_scikit_to_orange(input_dict['data'])
+
     for item in input_dict['noise']:
         det_by = item['name']
         for i in item['inds']:
@@ -68,12 +87,18 @@ def compareNoisyExamples(item1, item2):
 def noiserank_select(postdata,input_dict, output_dict):
     try:
         output_dict['indices']= outselection = [int(i) for i in postdata['selected']]
-        data = input_dict['data']
+
+        # data = input_dict['data']
+        data = u.convert_dataset_from_scikit_to_orange(input_dict['data'])
+
         selection = [0]*len(data)
         for i in outselection:
             selection[i] = 1
         outdata = data.select(selection, 1)
-        output_dict['selection'] = outdata
+
+        data_scikit = u.convert_dataset_from_orange_to_scikit(outdata)
+
+        output_dict['selection'] = data_scikit
     except KeyError:
         output_dict['selection'] = None
 
@@ -83,10 +108,22 @@ def noiserank_select(postdata,input_dict, output_dict):
 # EVALUATION OF NOISE DETECTION PERFORMANCE
 
 def add_class_noise(input_dict):
+    """Widget Add Class Noise
     """
-    """
+
+    data_scikit = input_dict['data']
+    if not(d.is_target_nominal(data_scikit)):
+        raise Exception("Widget Add Class Noise accepts only datasets with nominal class!")
+
+    data = u.convert_dataset_from_scikit_to_orange(data_scikit)
+
     import cf_noise.noiseAlgorithms4lib as nalg
-    output_dict = nalg.addClassNoise(input_dict['data'], input_dict['noise_level'], input_dict['rnd_seed'])
+    noise_indices, orange_data = nalg.add_class_noise(data, input_dict['noise_level'], input_dict['rnd_seed'])
+
+    data = u.convert_dataset_from_orange_to_scikit(orange_data)
+
+    output_dict = {'noise_inds':noise_indices, 'noisy_data': data}
+
     return output_dict
 
 def aggr_results(input_dict):
@@ -98,6 +135,7 @@ def aggr_results(input_dict):
     output_dict = {}
     output_dict['aggr_dict'] = { 'positives' : input_dict['pos_inds'], 'by_alg': input_dict['detected_inds']}
     return output_dict
+
 
 def eval_batch(input_dict):
     """Widget "Evaluate Repeated Detection"
@@ -160,71 +198,65 @@ def eval_noise_detection(input_dict):
     output_dict['nd_eval'] = sorted(performance, key=itemgetter('name'))
     return output_dict
 
-def avrg_std(input_dict):
-    """Widget "Average and Standard Deviation" which for some reason is missing from source.ijs.si
-    -> to be connected on the left using widget "Evaluate Repeated Detection" (eval_batch)
+# ENSEMBLE
+
+def noise_detect_ensemble(input_dict):
+    """ Noise detection ensemble
+
+    :param input_dict:
+    :return:
     """
-    perf_results = input_dict['perf_results']
-    stats = {}
-    # Aggregate performance results
-    n = len(perf_results)
-    for i in range(n):
-        for item in perf_results[i]:
-            alg = item['name']
-            if not stats.has_key(alg):
-                stats[alg] = {}
-                stats[alg]['precisions'] = [item['precision']]
-                stats[alg]['recalls'] = [item['recall']]
-                stats[alg]['fscores'] = [item['fscore']]
-                stats[alg]['fbeta'] = item['fbeta']
+
+    import math
+    ens = {}
+    data_inds = input_dict['data_inds']
+    ens_type = input_dict['ens_type']
+
+    for item in data_inds:
+        #det_by = item['detected_by']
+        for i in item['inds']:
+            if not ens.has_key(i):
+                ens[i] = 1
             else:
-                stats[alg]['precisions'].append(item['precision'])
-                stats[alg]['recalls'].append(item['recall'])
-                stats[alg]['fscores'].append(item['fscore'])
+                ens[i] += 1
 
-            # if last experiment: compute averages
-            if i == n-1:
-                stats[alg]['avrg_pr'] = reduce(lambda x,y: x+y, stats[alg]['precisions'])/n
-                stats[alg]['avrg_re'] = reduce(lambda x,y: x+y, stats[alg]['recalls'])/n
-                stats[alg]['avrg_fs'] = reduce(lambda x,y: x+y, stats[alg]['fscores'])/n
+    ens_out = {}
+    ens_out['name'] = input_dict['ens_name']
+    ens_out['inds'] = []
+    n_algs = len(data_inds)
+    print ens_type
+    if ens_type == "consensus":
+        ens_out['inds'] = sorted([x[0] for x in ens.items() if x[1] == n_algs])
+    else: # majority
+        ens_out['inds'] = sorted([x[0] for x in ens.items() if x[1] >= math.floor(n_algs/2+1)])
 
-    # Compute Standard Deviations
-    import numpy
-    avrgstdout = []
-    print stats
-    for alg, stat in stats.items():
-        avrgstdout.append({'name': alg, 'precision': stat['avrg_pr'], 'recall': stat['avrg_re'],
-                           'fscore' : stat['avrg_fs'],
-                           'fbeta'  : stat['fbeta'],
-                           'std_pr' : numpy.std(stat['precisions']),
-                           'std_re' : numpy.std(stat['recalls']),
-                           'std_fs' : numpy.std(stat['fscores']) })
-
-    from operator import itemgetter
     output_dict = {}
-    output_dict['avrg_w_std'] = sorted(avrgstdout, key=itemgetter('name'))
+    output_dict['ens_out'] = ens_out
     return output_dict
+
 
 # VISUALIZATIONS
 
-def pr_space(input_dict):
-    return {}
-
-def eval_bar_chart(input_dict):
-    return {}
-
 def eval_to_table(input_dict):
+    """Widget Evaluation Results to Table"""
     return {}
 
-def data_table(input_dict):
-    return {}
-
-def data_info(input_dict):
-    return {}
-
-def definition_sentences(input_dict):
-    return {}
-
-def term_candidates(input_dict):
-    return {}
+# def pr_space(input_dict):
+#     return {}
+#
+# def eval_bar_chart(input_dict):
+#     return {}
+#
+#
+# def data_table(input_dict):
+#     return {}
+#
+# def data_info(input_dict):
+#     return {}
+#
+# def definition_sentences(input_dict):
+#     return {}
+#
+# def term_candidates(input_dict):
+#     return {}
 
