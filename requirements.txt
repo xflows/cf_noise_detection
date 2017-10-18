@@ -1,4 +1,4 @@
 cf_core
 cf_data_mining
 cf_weka
-orange
+Orange==2.5a4

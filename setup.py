@@ -1,15 +1,27 @@
-from setuptools import setup
+from setuptools import setup, find_packages
+import os
 
-setup(
+CLASSIFIERS = [
+    'Development Status :: 5 - Production/Stable',
+    'Intended Audience :: Developers',
+    'Intended Audience :: Science/Research',
+]
+
+dist = setup(
     name='cf_noise_detection',
     version='0.1',
-    include_package_data=True,
-    license='MIT License',
+    author='Darko Aleksovski',
     description='A ClowdFlows package containing noise detection widgets. The package is intended to be used along with ClowdFlows 2.0.',
-    
-    # install_requires=[
-    #       'scikit-learn>=0.14.1',
-    # ],
-    author='darkoa',
-    author_email='',
+    url='https://github.com/xflows/cf_noise_detection',
+    license='MIT License',
+    classifiers=CLASSIFIERS,
+    packages=find_packages(),
+    include_package_data=True,
+    zip_safe=False,
+    install_requires=[
+        'cf_core',
+        'cf_data_mining',
+        'cf_weka',
+        'Orange==2.5a4'
+    ],
 )
